@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "FABRIKConstraint.h"
 #include "GameFramework/Actor.h"
 #include "FABRIKContainer.generated.h"
 
@@ -35,7 +36,10 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	bool bActivateComputation;
-
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FFABRIKConstraint Constraints;
+	
 private:
 	void DrawHelpers();
 

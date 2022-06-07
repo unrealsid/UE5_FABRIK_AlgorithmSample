@@ -140,13 +140,25 @@ void AFABRIKContainer::ResolveIK()
 	//Set Position and rotation
 	for (int i = 0; i < Positions.Num(); ++i)
 	{
+		FQuat Rotation;
 		if(i == Positions.Num() - 1)
 		{
-			Bones[i]->SetActorRotation(Target->GetActorRotation().Quaternion() * StartRotationTarget.Quaternion().Inverse() * StartRotationBone[i].Quaternion());
+			//Last Bone
+			Rotation = Target->GetActorRotation().Quaternion() * StartRotationTarget.Quaternion().Inverse() * StartRotationBone[i].Quaternion();
+			
+			if(Constraints.bUseRotationConstraints)
+			{
+				auto RelativeRotation = UKismetMathLibrary::InverseTransformRotation(Bones[i - 1]->GetActorTransform(), Bones[i]->GetActorRotation());
+				UE_LOG(LogTemp, Warning, TEXT("Rotation: %s"), *RelativeRotation.ToString());
+			}
+
+			Bones[i]->SetActorRotation(Rotation);
 		}
 		else
 		{
-			Bones[i]->SetActorRotation(FQuat::FindBetweenVectors(StartDirectionSucc[i], Positions[i + 1] - Positions[i]) * StartRotationBone[i].Quaternion());
+			//Every other bone
+			Rotation = FQuat::FindBetweenVectors(StartDirectionSucc[i], Positions[i + 1] - Positions[i]) * StartRotationBone[i].Quaternion();
+			Bones[i]->SetActorRotation(Rotation);
 		}
 		
 		Bones[i]->SetActorLocation(Positions[i]);
