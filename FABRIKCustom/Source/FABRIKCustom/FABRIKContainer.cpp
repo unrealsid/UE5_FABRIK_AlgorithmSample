@@ -141,6 +141,7 @@ void AFABRIKContainer::ResolveIK()
 	for (int i = 0; i < Positions.Num(); ++i)
 	{
 		FQuat Rotation;
+		FRotator ClampedRotation;
 		if(i == Positions.Num() - 1)
 		{
 			//Last Bone
@@ -148,11 +149,19 @@ void AFABRIKContainer::ResolveIK()
 			
 			if(Constraints.bUseRotationConstraints)
 			{
-				auto RelativeRotation = UKismetMathLibrary::InverseTransformRotation(Bones[i - 1]->GetActorTransform(), Bones[i]->GetActorRotation());
-				UE_LOG(LogTemp, Warning, TEXT("Rotation: %s"), *RelativeRotation.ToString());
+				//auto CurrentRelativeRotation = UKismetMathLibrary::InverseTransformRotation(Bones[i - 1]->GetActorTransform(), Bones[i]->GetActorRotation());
+				auto CurrentRelativeRotation = UKismetMathLibrary::InverseTransformRotation(Bones[i - 1]->GetActorTransform(), Rotation.Rotator());
+				UE_LOG(LogTemp, Warning, TEXT("Local Rotation: %s"), *CurrentRelativeRotation.ToString());
+
+				CurrentRelativeRotation.Pitch = FMath::ClampAngle(CurrentRelativeRotation.Pitch, -Constraints.RotationConstraints[i].Pitch, Constraints.RotationConstraints[i].Pitch);
+				CurrentRelativeRotation.Yaw = FMath::ClampAngle(CurrentRelativeRotation.Yaw, -Constraints.RotationConstraints[i].Yaw, Constraints.RotationConstraints[i].Yaw);
+				CurrentRelativeRotation.Roll = FMath::ClampAngle(CurrentRelativeRotation.Roll, -Constraints.RotationConstraints[i].Roll, Constraints.RotationConstraints[i].Roll);
+
+				ClampedRotation = UKismetMathLibrary::TransformRotation(Bones[i - 1]->GetActorTransform(), CurrentRelativeRotation);
+				UE_LOG(LogTemp, Warning, TEXT("Global Rotation: %s"), *ClampedRotation.ToString());
 			}
 
-			Bones[i]->SetActorRotation(Rotation);
+			Bones[i]->SetActorRotation(ClampedRotation);
 		}
 		else
 		{
