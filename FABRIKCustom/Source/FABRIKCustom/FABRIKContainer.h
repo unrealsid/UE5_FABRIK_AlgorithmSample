@@ -46,6 +46,8 @@ private:
 	void Init();
 
 	void ResolveIK();
+
+	FRotator GetClampedBoneRotation(const AActor* Parent, FRotator UnclampedRotator, int32 BoneIdx);
 	
 protected:
 	// Called when the game starts or when spawned
