@@ -3,7 +3,9 @@
 
 #include "FABRIKContainer.h"
 #include "DrawDebugHelpers.h"
+#include "Components/SplineComponent.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Kismet/KismetSystemLibrary.h"
 
 // Sets default values
 AFABRIKContainer::AFABRIKContainer()
@@ -73,7 +75,7 @@ void AFABRIKContainer::Init()
 	}
 }
 
-void AFABRIKContainer::ResolveIK()
+void AFABRIKContainer::ResolveIK(float DeltaTime)
 {
 	if(Target == nullptr)
 	{
@@ -91,23 +93,67 @@ void AFABRIKContainer::ResolveIK()
 		Positions[i] = Bones[i]->GetActorLocation();
 	}
 
-	FRotator RootRotation = Bones[0]->GetAttachParentActor() != nullptr ? Bones[0]->GetAttachParentActor()->GetActorRotation() : FRotator(0, 0, 0);
-	auto RootRotationDifference = UKismetMathLibrary::NormalizedDeltaRotator(RootRotation, StartRotationRoot);
-
 	//Computation
-	double Distance = FVector::Distance(Target->GetActorLocation(), Bones[0]->GetActorLocation()) ;
+	const double Distance = FVector::Distance(Target->GetActorLocation(), Bones[0]->GetActorLocation()) ;
+
+	//Exceed distance of arm length
 	if(Distance >= CompleteLength) 
 	{
 		//Stretch it
-		FVector Direction = (Target->GetActorLocation() - Positions[0]).GetSafeNormal();
+		const FVector Direction = (Target->GetActorLocation() - Positions[0]).GetSafeNormal();
 
 		for (int i = 1; i < Positions.Num(); i++)
 		{
 			Positions[i] = Positions[i - 1] + Direction * BonesLength[i - 1];
 		}
+
+		//Compute Rail Movement Direction
+		if(CameraRail)
+		{
+			FVector RailForward = CameraRail->GetRailSplineComponent()->GetLocationAtTime(CurrentPositionOnRail,  ESplineCoordinateSpace::World,true);
+			FVector TargetVelocity = GetTargetVelocity(DeltaTime);
+
+			double Dot = RailForward.Dot(TargetVelocity.GetSafeNormal());
+
+			if(Dot > 0.8)
+			{
+				CurrentPositionOnRail += (TargetVelocity.GetSafeNormal().Length() / DeltaTime);
+
+				if(CurrentPositionOnRail > 1)
+				{
+					CurrentPositionOnRail = 1;
+				}
+
+				CameraRail->CurrentPositionOnRail = FMath::FInterpTo<float, float, float>(CameraRail->CurrentPositionOnRail, CurrentPositionOnRail, DeltaTime, 0.1);
+				
+			}
+
+			if(Dot < -0.8)
+			{
+				CurrentPositionOnRail -= (TargetVelocity.Length() / DeltaTime);
+			
+				if(CurrentPositionOnRail < 0)
+				{
+					CurrentPositionOnRail = 0;
+				}
+
+				//CameraRail->CurrentPositionOnRail = CurrentPositionOnRail;
+				
+				CameraRail->CurrentPositionOnRail = FMath::FInterpTo<float, float, float>(CameraRail->CurrentPositionOnRail, CurrentPositionOnRail, DeltaTime, 0.1);
+			}
+			
+			UE_LOG(LogTemp, Warning, TEXT("Velocity %s, Dot: %f, CurrentPositionOnRail: %f"), *TargetVelocity.ToString(), Dot, CurrentPositionOnRail);
+
+			if(GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Yellow, FString::Printf(TEXT("Velocity %s, Dot: %f"), *TargetVelocity.ToString(), Dot));
+			}
+                
+		}
 	}
 	else
 	{
+		//Within distance of arm length
 		for (int iterations = 0; iterations < Iterations ; iterations++)
 		{
 			//Back
@@ -140,40 +186,40 @@ void AFABRIKContainer::ResolveIK()
 	//Set Position and rotation
 	for (int i = 0; i < Positions.Num(); ++i)
 	{
-		FQuat Rotation;
-		
-		if(i == Positions.Num() - 1)
-		{
-			//Last Bone
-			Rotation = Target->GetActorRotation().Quaternion() * StartRotationTarget.Quaternion().Inverse() * StartRotationBone[i].Quaternion();
-			
-			if(Constraints.bUseRotationConstraints)
-			{
-				FRotator ClampedRotation = GetClampedBoneRotation(Bones[i - 1], Rotation.Rotator(), i);
-				Bones[i]->SetActorRotation(ClampedRotation);
-			}
-			else
-			{
-				Bones[i]->SetActorRotation(Rotation);
-			}
-			
-		}
-		else
-		{
-			//Every other bone
-			Rotation = FQuat::FindBetweenVectors(StartDirectionSucc[i], Positions[i + 1] - Positions[i]) * StartRotationBone[i].Quaternion();
-
-			if(Constraints.bUseRotationConstraints &&
-			   Bones.IsValidIndex(i-1))
-			{
-				FRotator ClampedRotation = GetClampedBoneRotation(Bones[i - 1], Rotation.Rotator(), i);
-				Bones[i]->SetActorRotation(ClampedRotation);
-			}
-			else
-			{
-				Bones[i]->SetActorRotation(Rotation);	
-			}
-		}
+		// FQuat Rotation;
+		//
+		// if(i == Positions.Num() - 1)
+		// {
+		// 	//Last Bone
+		// 	Rotation = Target->GetActorRotation().Quaternion() * StartRotationTarget.Quaternion().Inverse() * StartRotationBone[i].Quaternion();
+		// 	
+		// 	if(Constraints.bUseRotationConstraints)
+		// 	{
+		// 		FRotator ClampedRotation = GetClampedBoneRotation(Bones[i - 1], Rotation.Rotator(), i);
+		// 		Bones[i]->SetActorRotation(ClampedRotation);
+		// 	}
+		// 	else
+		// 	{
+		// 		Bones[i]->SetActorRotation(Rotation);
+		// 	}
+		// 	
+		// }
+		// else
+		// {
+		// 	//Every other bone
+		// 	Rotation = FQuat::FindBetweenVectors(StartDirectionSucc[i], Positions[i + 1] - Positions[i]) * StartRotationBone[i].Quaternion();
+		//
+		// 	if(Constraints.bUseRotationConstraints &&
+		// 	   Bones.IsValidIndex(i-1))
+		// 	{
+		// 		FRotator ClampedRotation = GetClampedBoneRotation(Bones[i - 1], Rotation.Rotator(), i);
+		// 		Bones[i]->SetActorRotation(ClampedRotation);
+		// 	}
+		// 	else
+		// 	{
+		// 		Bones[i]->SetActorRotation(Rotation);	
+		// 	}
+		// }
 		
 		Bones[i]->SetActorLocation(Positions[i]);
 	}
@@ -185,14 +231,14 @@ FRotator AFABRIKContainer::GetClampedBoneRotation(const AActor* Parent, FRotator
 	{
 		//auto CurrentRelativeRotation = UKismetMathLibrary::InverseTransformRotation(Bones[i - 1]->GetActorTransform(), Bones[i]->GetActorRotation());
 		auto CurrentRelativeRotation = UKismetMathLibrary::InverseTransformRotation(Parent->GetActorTransform(), UnclampedRotator);
-		UE_LOG(LogTemp, Warning, TEXT("Local Rotation: %s"), *CurrentRelativeRotation.ToString());
+		//UE_LOG(LogTemp, Warning, TEXT("Local Rotation: %s"), *CurrentRelativeRotation.ToString());
 
 		CurrentRelativeRotation.Pitch = FMath::ClampAngle(CurrentRelativeRotation.Pitch, -Constraints.RotationConstraints[BoneIdx].Pitch, Constraints.RotationConstraints[BoneIdx].Pitch);
 		CurrentRelativeRotation.Yaw = FMath::ClampAngle(CurrentRelativeRotation.Yaw, -Constraints.RotationConstraints[BoneIdx].Yaw, Constraints.RotationConstraints[BoneIdx].Yaw);
 		CurrentRelativeRotation.Roll = FMath::ClampAngle(CurrentRelativeRotation.Roll, -Constraints.RotationConstraints[BoneIdx].Roll, Constraints.RotationConstraints[BoneIdx].Roll);
 
 		const FRotator ClampedRotation = UKismetMathLibrary::TransformRotation(Parent->GetActorTransform(), CurrentRelativeRotation);
-		UE_LOG(LogTemp, Warning, TEXT("Global Rotation: %s"), *ClampedRotation.ToString());
+		//UE_LOG(LogTemp, Warning, TEXT("Global Rotation: %s"), *ClampedRotation.ToString());
 
 		return ClampedRotation;
 	}
@@ -200,10 +246,27 @@ FRotator AFABRIKContainer::GetClampedBoneRotation(const AActor* Parent, FRotator
 	return FRotator();
 }
 
+FVector AFABRIKContainer::GetTargetVelocity(float DeltaTime)
+{
+	if(Target)
+	{
+		auto CurrentLocation = Target->GetActorLocation();
+		const FVector TargetVelocity = (CurrentLocation - PreviousTargetLocation) / DeltaTime;
+		PreviousTargetLocation = Target->GetActorLocation();
+
+		return TargetVelocity;
+	}
+
+	return FVector::ZeroVector;
+}
+
 // Called when the game starts or when spawned
 void AFABRIKContainer::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if(Target)
+		PreviousTargetLocation = Target->GetActorLocation();
 }
 
 // Called every frame
@@ -214,7 +277,7 @@ void AFABRIKContainer::Tick(float DeltaTime)
 	if(bActivateComputation)
 	{
 		DrawHelpers();
-		ResolveIK();
+		ResolveIK(DeltaTime);
 	}
 }
 

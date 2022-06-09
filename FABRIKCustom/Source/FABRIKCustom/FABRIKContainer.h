@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "FABRIKConstraint.h"
+#include "CinematicCamera/Public/CameraRig_Rail.h"
 #include "GameFramework/Actor.h"
 #include "FABRIKContainer.generated.h"
 
@@ -39,20 +40,15 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	FFABRIKConstraint Constraints;
-	
-private:
-	void DrawHelpers();
 
-	void Init();
+	//Stores a ref to the rig rail
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	ACameraRig_Rail* CameraRail;
 
-	void ResolveIK();
+	UPROPERTY(BlueprintReadOnly, VisibleAnywhere)
+	float CurrentPositionOnRail;
 
-	FRotator GetClampedBoneRotation(const AActor* Parent, FRotator UnclampedRotator, int32 BoneIdx);
-	
 protected:
-	// Called when the game starts or when spawned
-	virtual void BeginPlay() override;
-
 	//Target To Origin
 	UPROPERTY()
 	TArray<double> BonesLength;
@@ -71,6 +67,27 @@ protected:
 	FRotator StartRotationTarget;
 
 	FRotator StartRotationRoot;
+	
+private:
+	FVector PreviousTargetLocation;
+
+	FVector CurrentTargetLocation;
+	
+	void DrawHelpers();
+
+	void Init();
+
+	void ResolveIK(float DeltaTime);
+
+	FRotator GetClampedBoneRotation(const AActor* Parent, FRotator UnclampedRotator, int32 BoneIdx);
+
+	FVector GetTargetVelocity(float DeltaTime);
+	
+protected:
+	// Called when the game starts or when spawned
+	virtual void BeginPlay() override;
+
+
 
 public:	
 	// Called every frame
